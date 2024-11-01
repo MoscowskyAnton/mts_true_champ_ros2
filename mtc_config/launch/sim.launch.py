@@ -27,25 +27,25 @@ def generate_launch_description():
     #print(slam_config)
 
     return LaunchDescription([
-         Node(
-             package='joy',
-             namespace='mtc',
-             executable='joy_node',
-             name='joy'
-         ),
-         Node(
-             package='teleop_twist_joy',
-             namespace='mtc',
-             executable='teleop_node',
-             name='teleop_node',
-             parameters=[
-                 {'publish_stamped_twist': True},
-                 {'enable_button': 1},
-                 {"axis_linear.x": 1},
-                 {"axis_angular.z": 0},
-                 {"scale_linear": {"x": 200.}},
-                 {"scale_angular": {"yaw":100.}}]
-         ),
+         # Node(
+         #     package='joy',
+         #     namespace='mtc',
+         #     executable='joy_node',
+         #     name='joy'
+         # ),
+         # Node(
+         #     package='teleop_twist_joy',
+         #     namespace='mtc',
+         #     executable='teleop_node',
+         #     name='teleop_node',
+         #     parameters=[
+         #         {'publish_stamped_twist': True},
+         #         {'enable_button': 1},
+         #         {"axis_linear.x": 1},
+         #         {"axis_angular.z": 0},
+         #         {"scale_linear": {"x": 200.}},
+         #         {"scale_angular": {"yaw":100.}}]
+         # ),
         Node(
             package='mtc_drivers',
             namespace='mtc',
@@ -63,7 +63,6 @@ def generate_launch_description():
             executable="rviz2",
             name="sim_rviz",
             arguments=['-d', [rviz_config]]
-
         ),
         Node(
             package="mtc_slam",
@@ -79,31 +78,30 @@ def generate_launch_description():
             namespace='mtc',
             executable="mtc_dir_commands_node",
             name="dir_commands",
-            parameters=[{'P_mov': 40.},
-                        {'I_mov': 00.},
-                        {'D_mov': 40.},
-                        {'max_movement_vel': 40},
-                        {'P_rot': 200.},
-                        {'I_rot': 40.},
-                        {'D_rot': -1.},
-                        {'buffer_len': 5},
-                        {'max_rotation_vel': 140}
-                ],
+            parameters=[config],
             remappings=[('true_odom', 'driver/true_odom')]
         ),
         Node(
-            package='carrot_trajectory_following',
+            package='mtc_controllers',
             namespace='mtc',
-            executable='carrot_standalone',
-            name='carrot_standalone',
+            executable='astar_step_controller_node',
+            name='astar_controller',
             parameters=[config],
-            remappings=[('step_slam_command', 'slam/cmd')],
-        ),
-        Node(
-            package='carrot_trajectory_following',
-            namespace='mtc',
-            executable='rviz2path_node',
-            #prefix=['konsole -e python3 -m pdb'],
-            name='rviz2path',
+            remappings=[]
         )
+        # Node(
+        #     package='carrot_trajectory_following',
+        #     namespace='mtc',
+        #     executable='carrot_standalone',
+        #     name='carrot_standalone',
+        #     parameters=[config],
+        #     remappings=[('step_slam_command', 'slam/cmd')],
+        # ),
+        # Node(
+        #     package='carrot_trajectory_following',
+        #     namespace='mtc',
+        #     executable='rviz2path_node',
+        #     #prefix=['konsole -e python3 -m pdb'],
+        #     name='rviz2path',
+        # )
     ])

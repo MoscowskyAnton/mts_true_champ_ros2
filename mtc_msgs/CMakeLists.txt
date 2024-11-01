@@ -19,6 +19,7 @@ find_package(geometry_msgs REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Sensors.msg"
   "msg/SetPWM.msg"
+  "msg/DirCommand.msg"
   "srv/DirectionCommand.srv"
   "srv/FollowTrajectory.srv"
   "srv/StepSLAMCommand.srv"

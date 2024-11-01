@@ -79,6 +79,9 @@ class SimulatorDriver(Node):
         self.declare_parameter('start_y', 0.0)
         self.declare_parameter('start_yaw', -np.pi/2)
 
+        self.declare_parameter('max_r', 2.0)
+        self.max_r = self.get_parameter('max_r').value
+
         self.x = self.get_parameter('start_x').value
         self.y = self.get_parameter('start_y').value
         self.yaw = self.get_parameter('start_yaw').value
@@ -125,38 +128,43 @@ class SimulatorDriver(Node):
 
         self.set_command(self.current_cmd[0], self.current_cmd[1], self.get_parameter('command_timer_period_s').value)
 
+    def sens_upd(self, msg_or_srv, sensors):
+        msg_or_srv.rangefinders_distances = [0.0] * 6
+        msg_or_srv.rangefinders_angles = [0.0] * 6
+
+        msg_or_srv.rangefinders_distances[0] = min((sensors['front_distance'] + self.robot_x/2) / 1000., self.max_r)
+        msg_or_srv.rangefinders_angles[0] = 0
+        msg_or_srv.rangefinders_distances[0] += np.random.normal(0, self.get_parameter('ranges_sigma').value)
+
+        msg_or_srv.rangefinders_distances[1] = min((sensors['left_45_distance'] + np.hypot(self.robot_x /2, self.robot_y /2))/1000., self.max_r)
+        msg_or_srv.rangefinders_angles[1] = np.pi/4
+        msg_or_srv.rangefinders_distances[1] += np.random.normal(0, self.get_parameter('ranges_sigma').value)
+
+        msg_or_srv.rangefinders_distances[2] = min((sensors['left_side_distance'] + self.robot_y/2)/1000., self.max_r)
+        msg_or_srv.rangefinders_angles[2] = np.pi/2
+        msg_or_srv.rangefinders_distances[2] += np.random.normal(0, self.get_parameter('ranges_sigma').value)
+
+        msg_or_srv.rangefinders_distances[3] = min((sensors['back_distance'] + self.robot_x/2)/1000., self.max_r)
+        msg_or_srv.rangefinders_angles[3] = np.pi
+        msg_or_srv.rangefinders_distances[3] += np.random.normal(0, self.get_parameter('ranges_sigma').value)
+
+        msg_or_srv.rangefinders_distances[4] = min((sensors['right_side_distance'] + self.robot_y/2)/1000., self.max_r)
+        msg_or_srv.rangefinders_angles[4] = -np.pi/2
+        msg_or_srv.rangefinders_distances[4] += np.random.normal(0, self.get_parameter('ranges_sigma').value)
+
+        msg_or_srv.rangefinders_distances[5] = min((sensors['right_45_distance'] + np.hypot(self.robot_x /2, self.robot_y /2))/1000., self.max_r)
+        msg_or_srv.rangefinders_angles[5] = -np.pi/4
+        msg_or_srv.rangefinders_distances[5] += np.random.normal(0, self.get_parameter('ranges_sigma').value)
+
+
+        msg_or_srv.robot_yaw = norm_angle(np.deg2rad(sensors['rotation_yaw']))
+
+        return msg_or_srv
+
     def get_sensosrs_cb(self, request, response):
         response.success, sensors = self.get_sensors()
         if response.success:
-            response.rangefinders_distances = [0.0] * 6
-            response.rangefinders_angles = [0.0] * 6
-
-            response.rangefinders_distances[0] = (sensors['front_distance'] + self.robot_x/2) / 100
-            response.rangefinders_angles[0] = 0
-            response.rangefinders_distances[0] += np.random.normal(0, self.get_parameter('ranges_sigma').value)
-
-            response.rangefinders_distances[1] = (sensors['left_45_distance'] + np.hypot(self.robot_x /2, self.robot_y /2))/100
-            response.rangefinders_angles[1] = np.pi/4
-            response.rangefinders_distances[1] += np.random.normal(0, self.get_parameter('ranges_sigma').value)
-
-            response.rangefinders_distances[2] = (sensors['left_side_distance'] + self.robot_y/2)/100
-            response.rangefinders_angles[2] = np.pi/2
-            response.rangefinders_distances[2] += np.random.normal(0, self.get_parameter('ranges_sigma').value)
-
-            response.rangefinders_distances[3] = (sensors['back_distance'] + self.robot_x/2)/100
-            response.rangefinders_angles[3] = np.pi
-            response.rangefinders_distances[3] += np.random.normal(0, self.get_parameter('ranges_sigma').value)
-
-            response.rangefinders_distances[4] = (sensors['right_side_distance'] + self.robot_y/2)/100
-            response.rangefinders_angles[4] = -np.pi/2
-            response.rangefinders_distances[4] += np.random.normal(0, self.get_parameter('ranges_sigma').value)
-
-            response.rangefinders_distances[5] = (sensors['right_45_distance'] + np.hypot(self.robot_x /2, self.robot_y /2))/100
-            response.rangefinders_angles[5] = -np.pi/4
-            response.rangefinders_distances[5] += np.random.normal(0, self.get_parameter('ranges_sigma').value)
-                                                                   
-
-            response.robot_yaw = norm_angle(np.deg2rad(sensors['rotation_yaw']))# + np.pi/2)
+            response = self.sens_upd(response, sensors)
 
         return response
 
@@ -169,28 +177,7 @@ class SimulatorDriver(Node):
             sens_msg = Sensors()
             sens_msg.header.stamp = now.to_msg()
 
-            sens_msg.rangefinders_distances = [0.0] * 6
-            sens_msg.rangefinders_angles = [0.0] * 6
-
-            sens_msg.rangefinders_distances[0] = (sensors['front_distance'] + self.robot_x/2) / 100
-            sens_msg.rangefinders_angles[0] = 0
-
-            sens_msg.rangefinders_distances[1] = (sensors['left_45_distance'] + np.hypot(self.robot_x /2, self.robot_y /2))/100
-            sens_msg.rangefinders_angles[1] = np.pi/4
-
-            sens_msg.rangefinders_distances[2] = (sensors['left_side_distance'] + self.robot_y/2)/100
-            sens_msg.rangefinders_angles[2] = np.pi/2
-
-            sens_msg.rangefinders_distances[3] = (sensors['back_distance'] + self.robot_x/2)/100
-            sens_msg.rangefinders_angles[3] = np.pi
-
-            sens_msg.rangefinders_distances[4] = (sensors['right_side_distance'] + self.robot_y/2)/100
-            sens_msg.rangefinders_angles[4] = -np.pi/2
-
-            sens_msg.rangefinders_distances[5] = (sensors['right_45_distance'] + np.hypot(self.robot_x /2, self.robot_y /2))/100
-            sens_msg.rangefinders_angles[5] = -np.pi/4
-
-            sens_msg.robot_yaw = norm_angle(np.deg2rad(sensors['rotation_yaw']))# + np.pi/2)
+            sens_msg = self.sens_upd(sens_msg, sensors)
 
             self.sensors_pub.publish(sens_msg)
 
@@ -206,8 +193,8 @@ class SimulatorDriver(Node):
             odom_msg.header.frame_id = "map"
             odom_msg.child_frame_id = "true_odom"
 
-            odom_msg.pose.pose.position.x = self.x + (sensors['down_y_offset'] - self.start_x)/100 # m
-            odom_msg.pose.pose.position.y = self.y + (sensors['down_x_offset'] - self.start_y)/100 # m
+            odom_msg.pose.pose.position.x = self.x + (sensors['down_y_offset'] - self.start_x)/1000. # m
+            odom_msg.pose.pose.position.y = self.y + (sensors['down_x_offset'] - self.start_y)/1000. # m
 
             yaw = -(self.yaw + np.deg2rad(sensors['rotation_yaw']) - self.start_yaw)
             #yaw = np.deg2rad(sensors['rotation_yaw'])
@@ -260,14 +247,14 @@ class SimulatorDriver(Node):
     def set_command(self, pwm_l, pwm_r, time = 1):
         pwm_l = int(pwm_l)
         pwm_r = int(pwm_r)
-        #print(f'set_command: {pwm_l} {pwm_r}')
+        #universal_print(f'set_command: {pwm_l} {pwm_r}')
         connection = http.client.HTTPConnection('127.0.0.1:8801')
 
         connection.request('POST', f'/api/v1/robot-motors/move?token={self.token}&l={pwm_l}&l_time={time}&r={pwm_r}&r_time={time}', headers={'accept': 'application/json'})
 
         response = connection.getresponse()
         if response.status != 200:
-            #print(f'Error {response.status} {response.read()}')
+            #universal_print(f'Error {response.status} {response.read()}')
             self.get_logger().error(f'Error send {response.status} {response.read()}')
             return False
         return True
@@ -285,7 +272,7 @@ class SimulatorDriver(Node):
 
 
 def main(args=None):
-    #print('Hi from mtc_drivers.')
+    #universal_print('Hi from mtc_drivers.')
     rclpy.init(args=args)
 
     driver = SimulatorDriver()

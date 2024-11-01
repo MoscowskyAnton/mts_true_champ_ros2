@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'mtc_drivers'
+package_name = 'mtc_controllers'
 
 setup(
     name=package_name,
@@ -16,14 +16,13 @@ setup(
     maintainer='anton',
     maintainer_email='moscowskyad@yandex.ru',
     description='TODO: Package description',
-    license='Apache-2.0',
+    license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'sim_driver_node = mtc_drivers.sim_driver_node:main',
             'service = py_srvcli.service_member_function:main',
-            'real_driver_node = mtc_drivers.real_robot_driver_node:main',
-            'bag_vis_node = mtc_drivers.bag_visualisator_node:main'
+            'client = py_srvcli.client_member_function:main',
+            'astar_step_controller_node = mtc_controllers.astar_step_controller_node:main'
         ],
     },
 )

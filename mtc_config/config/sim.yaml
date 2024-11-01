@@ -1,26 +1,52 @@
 mtc/driver:
   ros__parameters:
-    ranges_sigma: 0.1
-    start_x: 0.91
-    start_y: 0.91
+    ranges_sigma: 0.01
+    start_x: 0.091
+    start_y: 0.091
     start_yaw: -1.5708
+    max_r: 2.0
     
 
 mtc/slam:
   ros__parameters:
     lab_size: [16, 16]
-    cell_size: [1.50, 1.50]
-    pile_size: 0.165
-    start_pose: [0.91, 0.91, 1.5708]
-    start_pose_sigma: [0.02, 0.02, 0.01]
+    cell_size: [0.150, 0.150]
+    pile_size: 0.0165
+    start_pose: [0.091, 0.091, 1.5708]
+    start_pose_sigma: [0.01, 0.01, 0.01]
     n_particles: 500
     wall_th: 0.75
-    alpha: [0.75, 0.05, 0.75, 0.05, 0.1, 0.1]
+    alpha: [0.6, 0.01, 0.6, 0.01, 0.1, 0.1]
     n_updates: 4
     #alpha: [.0, .0, .0, .0, .0, .0]
-    range_sigma: 0.1
-    on_wall_th: 8
-    wall_clear_th: 2
+    range_sigma: 0.01
+    on_wall_th: 5.0
+    wall_clear_th: 2.0
+    max_r: 2.0
+
+    on_wall_th: 5.0 # in parts of cell_size[0]
+    wall_clear_th: 2.0 # in parts of cell_size[0]
+
+mtc/astar_controller:
+  ros__parameters:
+    cell_total_size: [0.166, 0.166]
+    #sim: true
+    sim: false # maybe just old artefact
+    angle_th: 0.25
+    avoid_lim: 10
+    stuck_mp: 5.
+
+mtc/dir_commands:
+  ros__parameters:
+    P_mov: 400.
+    I_mov: 0.0
+    D_mov: 400.
+    max_movement_vel: 40
+    P_rot: 200.
+    I_rot: 40.
+    D_rot: -1.
+    buffer_len: 5
+    max_rotation_vel: 140
 
 mtc/carrot_standalone:
   ros__parameters:

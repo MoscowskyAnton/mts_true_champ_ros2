@@ -105,7 +105,7 @@ class DirCommandService(Node):
         # publisher for commands (now it is TwistStamped only)
         self.pub_pwm = self.create_publisher(SetPWM, 'driver/pwm', 1)
         # subscriber for precise position
-        self.cb_true_odom = self.create_subscription(Odometry, 'true_odom', self.cb_true_odom,
+        self.sub_true_odom = self.create_subscription(Odometry, 'true_odom', self.cb_true_odom,
                                                      1, callback_group=self.unified_callback_group)
         # service
         self.srv = self.create_service(DirectionCommand, 'dir_command',

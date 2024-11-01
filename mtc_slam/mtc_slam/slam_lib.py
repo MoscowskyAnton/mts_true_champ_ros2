@@ -42,6 +42,29 @@ def quaternion_from_euler(roll, pitch, yaw):
 
     return q
 
+def euler_from_quaternion(quaternion):
+    """
+    Converts quaternion (w in last place) to euler roll, pitch, yaw
+    quaternion = [x, y, z, w]
+    Bellow should be replaced when porting for ROS 2 Python tf_conversions is done.
+    """
+    x = quaternion.x
+    y = quaternion.y
+    z = quaternion.z
+    w = quaternion.w
+
+    sinr_cosp = 2 * (w * x + y * z)
+    cosr_cosp = 1 - 2 * (x * x + y * y)
+    roll = np.arctan2(sinr_cosp, cosr_cosp)
+
+    sinp = 2 * (w * y - z * x)
+    pitch = np.arcsin(sinp)
+
+    siny_cosp = 2 * (w * z + x * y)
+    cosy_cosp = 1 - 2 * (y * y + z * z)
+    yaw = np.arctan2(siny_cosp, cosy_cosp)
+
+    return roll, pitch, yaw
 
 def skukozjit_walls(walls, score = 0.5):
     scores = walls[:, :, 0]
@@ -60,36 +83,17 @@ def raskukozjit_v_walls(walls, cell_n):
 
 class SLAM(object):
     
-    def __init__(self, lab_size, cell_size, pile_size, start_pose, start_pose_sigmas, n_particels, wall_th, alpha, range_sigma, on_wall_th, wall_clear_th):
+    def __init__(self, lab_size, cell_size, pile_size, start_pose, start_pose_sigmas, n_particels, wall_th, alpha, range_sigma, on_wall_th, wall_clear_th, max_r, compass_sigma):
         
         self.print_func = print
 
         self.cell_size = cell_size
         self.pile_size = pile_size
         
-        # score, n, x, y1, y2
-        self.v_walls = np.ones((lab_size[0]+1, lab_size[1], 5), dtype = float)
-        self.v_walls[:, :, 0] = -1
-        self.v_walls[:, :, 1] = 0
+        self.max_r = max_r
 
-        self.v_walls[0, :, 0] = 2
-        self.v_walls[-1, :, 0] = 2
-
-        for ix in range(self.v_walls.shape[0]):
-            for iy in range(self.v_walls.shape[1]):
-                self.v_walls[ix, iy, 2:] = self.get_v_wall_coords(ix, iy)
-
-        self.h_walls = np.ones((lab_size[0], lab_size[1] + 1, 5), dtype = float)
-        self.h_walls[:, :, 0] = -1
-        self.h_walls[:, :, 1] = 0
-
-        self.h_walls[:, 0, 0] = 2
-        self.h_walls[:, -1, 0] = 2
-
-        for ix in range(self.h_walls.shape[0]):
-            for iy in range(self.h_walls.shape[1]):
-                self.h_walls[ix, iy, 2:] = self.get_h_wall_coords(ix, iy)
-                
+        self.lab_size = lab_size
+        self.init_map()
                 
         self.x = start_pose[0]
         self.y = start_pose[1]
@@ -97,6 +101,7 @@ class SLAM(object):
         
         self.wall_th = wall_th
         self.range_sigma = range_sigma
+        self.compass_sigma = compass_sigma
         
         self.NP = n_particels
         self.init_pf(start_pose, start_pose_sigmas)
@@ -108,13 +113,40 @@ class SLAM(object):
         
         self.on_wall_th = on_wall_th
         self.wall_clear_th = wall_clear_th
+
+        self.prev_compass_angle = None
+
+    def init_map(self):
+        # score, n, x, y1, y2
+        self.v_walls = np.ones((self.lab_size[0]+1, self.lab_size[1], 5), dtype = float)
+        self.v_walls[:, :, 0] = -1
+        self.v_walls[:, :, 1] = 0
+
+        self.v_walls[0, :, 0] = 2
+        self.v_walls[-1, :, 0] = 2
+
+        for ix in range(self.v_walls.shape[0]):
+            for iy in range(self.v_walls.shape[1]):
+                self.v_walls[ix, iy, 2:] = self.get_v_wall_coords(ix, iy)
+
+        self.h_walls = np.ones((self.lab_size[0], self.lab_size[1] + 1, 5), dtype = float)
+        self.h_walls[:, :, 0] = -1
+        self.h_walls[:, :, 1] = 0
+
+        self.h_walls[:, 0, 0] = 2
+        self.h_walls[:, -1, 0] = 2
+
+        for ix in range(self.h_walls.shape[0]):
+            for iy in range(self.h_walls.shape[1]):
+                self.h_walls[ix, iy, 2:] = self.get_h_wall_coords(ix, iy)
+
         
     def init_pf(self, start_pose, start_pose_sigmas):
         self.P = np.ones((self.NP, 3))
         
-        self.P[:, 0] = start_pose[0] + np.random.normal(0, start_pose_sigmas[0])
-        self.P[:, 1] = start_pose[1] + np.random.normal(0, start_pose_sigmas[1])
-        self.P[:, 2] = norm_angle(start_pose[2] + np.random.normal(0, start_pose_sigmas[2]))
+        self.P[:, 0] = start_pose[0] + np.random.normal(0, start_pose_sigmas[0], self.NP)
+        self.P[:, 1] = start_pose[1] + np.random.normal(0, start_pose_sigmas[1], self.NP)
+        self.P[:, 2] = norm_angle(start_pose[2] + np.random.normal(0, start_pose_sigmas[2], self.NP))
         
         self.W = np.ones(self.NP)
         
@@ -142,6 +174,14 @@ class SLAM(object):
         self.P[:,0] += dx + np.random.normal(0, self.alpha[0] * np.abs(dx) + self.alpha[1] * np.abs(dyaw), self.NP)
         self.P[:,1] += dy + np.random.normal(0, self.alpha[2] * np.abs(dy) + self.alpha[3] * np.abs(dyaw), self.NP)
         self.P[:,2] += dyaw + np.random.normal(0, self.alpha[4] * np.abs(dr) + self.alpha[5] * np.abs(dyaw), self.NP)
+
+
+    def compass_update(self, compass_angle):
+        if self.prev_compass_angle is None:
+            self.prev_compass_angle = compass_angle
+            return
+        robot_angle = norm_angle(self.yaw + (self.prev_compass_angle - compass_angle))
+        self.W += norm_pdf(substract_angles(robot_angle, self.P[:, 2]), self.compass_sigma)
 
 
     # sensors_data are
@@ -224,7 +264,12 @@ class SLAM(object):
     def update_map(self, sensors_data):
         for sensor in sensors_data:
             a, r = sensor
+            if self.max_r != 0 and r >= self.max_r:
+                continue
             sensor_seg = [self.x, self.y, self.x + r * np.cos(self.yaw + a), self.y + r * np.sin(self.yaw + a)]
+
+            vs_i = []
+            vs_r2w = []
             # check v
             for vx in range(self.v_walls.shape[0]):
                 for vy in range(self.v_walls.shape[1]):
@@ -232,26 +277,55 @@ class SLAM(object):
                     if self.v_walls[vx, vy, 0] < 2:
                         wall_coords = self.get_v_wall_coords(vx, vy, False)
                         w, r2w, da = self.analyse_v_wall(wall_coords, sensor_seg, self.on_wall_th)
-                        if w != -1:
+                        if w == 0:
                             #print(w)
                             self.v_walls[vx, vy, 1] += 1
                             if self.v_walls[vx, vy, 0] == -1:
                                 self.v_walls[vx, vy, 0] = w
                             else:
-                                self.v_walls[vx, vy, 0] += (w - self.v_walls[vx, vy, 0])/self.v_walls[vx, vy, 1]
+                                self.v_walls[vx, vy, 0] -= (self.v_walls[vx, vy, 0])/self.v_walls[vx, vy, 1]
+                        elif w == 1:
+                            vs_i.append((vx, vy))
+                            vs_r2w.append(r2w)
+                            # self.v_walls[vx, vy, 0] += (w - self.v_walls[vx, vy, 0])/self.v_walls[vx, vy, 1]
+            hs_i = []
+            hs_r2w = []
             # check h
             for vx in range(self.h_walls.shape[0]):
                 for vy in range(self.h_walls.shape[1]):
                     if self.h_walls[vx, vy, 0] < 2:
                         wall_coords = self.get_h_wall_coords(vx, vy, False)
                         w, r2w, da = self.analyse_h_wall(wall_coords, sensor_seg, self.on_wall_th)
-                        if w != -1:
+                        if w == 0:
                             self.h_walls[vx, vy, 1] += 1
                             #self.h_walls[vx, vy, 0] += (w - self.h_walls[vx, vy, 0])#/self.h_walls[vx, vy, 1]
                             if self.h_walls[vx, vy, 0] == -1:
                                 self.h_walls[vx, vy, 0] = w
                             else:
-                                self.h_walls[vx, vy, 0] += (w - self.h_walls[vx, vy, 0])/self.h_walls[vx, vy, 1]
+                                self.h_walls[vx, vy, 0] -= (self.h_walls[vx, vy, 0])/self.h_walls[vx, vy, 1]
+                        elif w == 1:
+                            hs_i.append((vx, vy))
+                            hs_r2w.append(r2w)
+                            # self.h_walls[vx, vy, 0] += (w - self.h_walls[vx, vy, 0])/self.h_walls[vx, vy, 1]
+
+
+
+            H = (len(hs_i) > 0 and len(vs_i) > 0 and np.min(hs_r2w) < np.min(vs_r2w)) or (len(vs_i) == 0 and len(hs_i) > 0)
+            V = (len(hs_i) > 0 and len(vs_i) > 0 and np.min(hs_r2w) > np.min(vs_r2w)) or (len(vs_i) > 0 and len(hs_i) == 0)
+            if V:
+                i = np.argmin(vs_r2w)
+                self.v_walls[vs_i[i][0], vs_i[i][1], 1] += 1
+                if self.v_walls[vs_i[i][0], vs_i[i][1], 0] == -1:
+                    self.v_walls[vs_i[i][0], vs_i[i][1], 0] = 0.5
+                else:
+                    self.v_walls[vs_i[i][0], vs_i[i][1], 0] += (1 - self.v_walls[vs_i[i][0], vs_i[i][1], 0])/ self.v_walls[vs_i[i][0], vs_i[i][1], 1]
+            elif H:
+                i = np.argmin(hs_r2w)
+                self.h_walls[hs_i[i][0], hs_i[i][1], 1] += 1
+                if self.h_walls[hs_i[i][0], hs_i[i][1], 0] == -1:
+                    self.h_walls[hs_i[i][0], hs_i[i][1], 0] = 0.5
+                else:
+                    self.h_walls[hs_i[i][0], hs_i[i][1], 0] += (1 - self.h_walls[hs_i[i][0], hs_i[i][1], 0])/ self.h_walls[hs_i[i][0], hs_i[i][1], 1]
 
     def get_h_wall_coords(self, ix, iy, with_pile = True):
         xh1 = ix * (self.cell_size[0]+self.pile_size)# - (self.cell_size[0]+self.pile_size) / 2
@@ -362,68 +436,68 @@ class SLAM(object):
         return [x, y]
 
 
-    def draw_map(self, ranges = None, text_prob = False):
-        plt.figure("map")
-        plt.cla()
-        # visited cells
-        # for n in range(self.was_cells.shape[0]):
-        #     for m in range(self.was_cells.shape[1]):
-        #         if self.was_cells[n, m] == 0:
-        #             coords = self.cell_to_coords((n, m))
-        #             plt.plot(coords[0], coords[1], 's', color = 'grey')
-        # v walls
-        for n in range(self.v_walls.shape[0]):
-            for m in range(self.v_walls.shape[1]):
-
-                xh, yh1, yh2 = self.get_v_wall_coords(n, m, True)
-                if self.v_walls[n, m, 0] == -1:
-                    plt.plot([xh, xh], [yh1, yh2], ':', color = 'grey')
-                elif self.v_walls[n, m, 0] == 2:
-                    plt.plot([xh, xh], [yh1, yh2], color = 'black')
-                else:
-                    alpha = max(0, min(1, round(self.v_walls[n, m, 0], 3)))
-                    #print(alpha)
-                    plt.plot([xh, xh], [yh1, yh2], color = 'black', alpha = alpha)
-                    if text_prob:
-                        plt.text(xh, (yh1+yh2)/2, f"{alpha}")
-
-        # h walls
-        for n in range(self.h_walls.shape[0]):
-            for m in range(self.h_walls.shape[1]):
-                xh1, xh2, yh = self.get_h_wall_coords(n, m, True)
-                if self.h_walls[n, m, 0] == -1:
-                    plt.plot([xh1, xh2], [yh, yh], ':', color = 'grey')
-                elif self.h_walls[n, m, 0] == 2:
-                    plt.plot([xh1, xh2], [yh, yh], color = 'black')
-                else:
-                    alpha = max(0, min(1, round(self.h_walls[n, m, 0], 3)))
-                    print(self.h_walls[n, m, 0])
-                    plt.plot([xh1, xh2], [yh, yh], color = 'black', alpha = alpha)
-                    if text_prob:
-                        plt.text((xh1 + xh2)/2, yh, f"{alpha}")
-
-        # localization
-        max_lenght = self.cell_size[0] / 3
-        max_w = np.max(self.W)
-        scale = max_lenght / max_w
-        color = 'orange'#'cyan'
-        for p in range(self.P.shape[0]):
-            lenght = self.W[p] * scale
-            #plt.arrow(self.P[p,0], self.P[p,1], np.cos(self.P[p,2])*lenght, np.sin(self.P[p,2])*lenght, color = color, shape = 'full', head_width=0.1, alpha = 0.5)
-            plt.plot(self.P[p,0], self.P[p,1], '.', color = color, alpha = self.W[p] / max_w)
-
-        plt.arrow(self.x, self.y, max_lenght * np.cos(self.yaw), max_lenght* np.sin(self.yaw), color = 'red')
-        plt.plot(self.x, self.y, '.r')
-
-        if not ranges is None:
-            for sens_range in ranges:
-                a, r = sens_range
-                x = self.x + r * np.cos(a + self.yaw)
-                y = self.y + r * np.sin(a + self.yaw)
-                plt.plot(x, y, '*r')
-
-        plt.title(f"Map")
-        plt.gca().set_aspect('equal', adjustable='box')
+    # def draw_map(self, ranges = None, text_prob = False):
+    #     plt.figure("map")
+    #     plt.cla()
+    #     # visited cells
+    #     # for n in range(self.was_cells.shape[0]):
+    #     #     for m in range(self.was_cells.shape[1]):
+    #     #         if self.was_cells[n, m] == 0:
+    #     #             coords = self.cell_to_coords((n, m))
+    #     #             plt.plot(coords[0], coords[1], 's', color = 'grey')
+    #     # v walls
+    #     for n in range(self.v_walls.shape[0]):
+    #         for m in range(self.v_walls.shape[1]):
+    #
+    #             xh, yh1, yh2 = self.get_v_wall_coords(n, m, True)
+    #             if self.v_walls[n, m, 0] == -1:
+    #                 plt.plot([xh, xh], [yh1, yh2], ':', color = 'grey')
+    #             elif self.v_walls[n, m, 0] == 2:
+    #                 plt.plot([xh, xh], [yh1, yh2], color = 'black')
+    #             else:
+    #                 alpha = max(0, min(1, round(self.v_walls[n, m, 0], 3)))
+    #                 #print(alpha)
+    #                 plt.plot([xh, xh], [yh1, yh2], color = 'black', alpha = alpha)
+    #                 if text_prob:
+    #                     plt.text(xh, (yh1+yh2)/2, f"{alpha}")
+    #
+    #     # h walls
+    #     for n in range(self.h_walls.shape[0]):
+    #         for m in range(self.h_walls.shape[1]):
+    #             xh1, xh2, yh = self.get_h_wall_coords(n, m, True)
+    #             if self.h_walls[n, m, 0] == -1:
+    #                 plt.plot([xh1, xh2], [yh, yh], ':', color = 'grey')
+    #             elif self.h_walls[n, m, 0] == 2:
+    #                 plt.plot([xh1, xh2], [yh, yh], color = 'black')
+    #             else:
+    #                 alpha = max(0, min(1, round(self.h_walls[n, m, 0], 3)))
+    #                 print(self.h_walls[n, m, 0])
+    #                 plt.plot([xh1, xh2], [yh, yh], color = 'black', alpha = alpha)
+    #                 if text_prob:
+    #                     plt.text((xh1 + xh2)/2, yh, f"{alpha}")
+    #
+    #     # localization
+    #     max_lenght = self.cell_size[0] / 3
+    #     max_w = np.max(self.W)
+    #     scale = max_lenght / max_w
+    #     color = 'orange'#'cyan'
+    #     for p in range(self.P.shape[0]):
+    #         lenght = self.W[p] * scale
+    #         #plt.arrow(self.P[p,0], self.P[p,1], np.cos(self.P[p,2])*lenght, np.sin(self.P[p,2])*lenght, color = color, shape = 'full', head_width=0.1, alpha = 0.5)
+    #         plt.plot(self.P[p,0], self.P[p,1], '.', color = color, alpha = self.W[p] / max_w)
+    #
+    #     plt.arrow(self.x, self.y, max_lenght * np.cos(self.yaw), max_lenght* np.sin(self.yaw), color = 'red')
+    #     plt.plot(self.x, self.y, '.r')
+    #
+    #     if not ranges is None:
+    #         for sens_range in ranges:
+    #             a, r = sens_range
+    #             x = self.x + r * np.cos(a + self.yaw)
+    #             y = self.y + r * np.sin(a + self.yaw)
+    #             plt.plot(x, y, '*r')
+    #
+    #     plt.title(f"Map")
+    #     plt.gca().set_aspect('equal', adjustable='box')
         
     # ROS2
     def to_pose_msg(self):
@@ -477,7 +551,8 @@ class SLAM(object):
 
     def to_marker_array_msg(self, header):
         ma_msg = MarkerArray()
-        z_wall = 0.2
+        #z_wall = 0.2
+        z_wall = 0.05
         for i in range(self.v_walls.shape[0]):
             for j in range(self.v_walls.shape[1]):
                 if self.v_walls[i, j, 0] != -1:
@@ -489,7 +564,6 @@ class SLAM(object):
                     mrk.type = Marker.CUBE
                     mrk.pose.position.x = self.v_walls[i, j, 2]
                     mrk.pose.position.y = (self.v_walls[i, j, 3] + self.v_walls[i, j, 4])/2
-                    mrk.pose.position.z = z_wall/2
 
                     mrk.pose.orientation.w = 1.
 
@@ -498,15 +572,27 @@ class SLAM(object):
                         mrk.color.g = .0
                         mrk.color.b = .0
                         mrk.color.a = 1.
-                    elif self.v_walls[i, j, 0] > self.wall_th:
+                        mrk.pose.position.z = z_wall/2
+                        mrk.scale.z = z_wall
+                    #elif self.v_walls[i, j, 0] > self.wall_th:
+                    elif self.v_walls[i, j, 0] == 2:
+                        mrk.action = Marker.DELETE
+                    else:
                         mrk.color.r = 0.5
                         mrk.color.g = 0.5
                         mrk.color.b = 0.5
-                        mrk.color.a = min(1., self.v_walls[i, j, 0])
+                        #mrk.color.a = min(1., self.v_walls[i, j, 0])
+                        if self.v_walls[i, j, 0] >= self.wall_th:
+                            mrk.color.a = 1.
+                        else:
+                            mrk.color.a = .5
+                        z_wall_ = z_wall * self.v_walls[i, j, 0]
+                        mrk.pose.position.z = z_wall_/2
+                        mrk.scale.z = z_wall_
 
                     mrk.scale.x = self.pile_size
                     mrk.scale.y = self.cell_size[1] + self.pile_size
-                    mrk.scale.z = z_wall
+
 
                     ma_msg.markers.append(mrk)
         for i in range(self.h_walls.shape[0]):
@@ -523,21 +609,33 @@ class SLAM(object):
                     mrk.pose.position.z = z_wall/2
 
                     mrk.pose.orientation.w = 1.
-
                     if self.h_walls[i, j, 0] == 2:
                         mrk.color.r = .5
                         mrk.color.g = .0
                         mrk.color.b = .0
                         mrk.color.a = 1.
+                        mrk.pose.position.z = z_wall/2
+                        mrk.scale.z = z_wall
+
+                    elif self.h_walls[i, j, 0] == -1:
+                        mrk.action = Marker.DELETE
                     else:
                         mrk.color.r = 0.5
                         mrk.color.g = 0.5
                         mrk.color.b = 0.5
-                        mrk.color.a = min(1., self.h_walls[i, j, 0])
+                        if self.h_walls[i, j, 0] >= self.wall_th:
+                            mrk.color.a = 1.
+                        else:
+                            mrk.color.a = .5
+                        z_wall_ = z_wall * self.h_walls[i, j, 0]
+                        mrk.pose.position.z = z_wall_/2
+                        mrk.scale.z = z_wall_
+
+                        #mrk.color.a = min(1., self.h_walls[i, j, 0])
 
                     mrk.scale.x = self.cell_size[0] + self.pile_size
                     mrk.scale.y = self.pile_size
-                    mrk.scale.z = z_wall
+                    #mrk.scale.z = z_wall
 
                     ma_msg.markers.append(mrk)
         return ma_msg
@@ -554,7 +652,7 @@ class SLAM(object):
         msg.color.r = 1.0
 
         
-        msg.scale.x = 0.02
+        msg.scale.x = 0.002
         
         scale = max_z / np.max(self.W)
             

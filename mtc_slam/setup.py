@@ -24,6 +24,8 @@ setup(
             #'slam_node = mtc_slam.slam_node:main',
             'step_slam_node = mtc_slam.step_slam_node:main',
             'client = py_srvcli.client_member_function:main',
+            'bag_play_node = mtc_slam.bag_play_node:main',
+            'bag_plug_node = mtc_slam.bag_play_plug_node:main'
         ],
     },
 )

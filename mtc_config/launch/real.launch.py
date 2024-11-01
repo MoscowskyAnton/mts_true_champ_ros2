@@ -38,5 +38,13 @@ def generate_launch_description():
             parameters = [config],
             remappings=[('get_sensors', '/mtc/driver/get_sensors'),
                         ('cmd', '/mtc/dir_command')]
+        ),
+        Node(
+            package='mtc_controllers',
+            namespace='mtc',
+            executable='astar_step_controller_node',
+            name='astar_controller',
+            parameters=[config],
+            remappings=[]
         )
     ])
