@@ -1,0 +1,12 @@
+uint8 FORWARD=0
+uint8 BACKWARD=1
+uint8 LEFT=2
+uint8 RIGHT=3
+
+uint8 direction  # one of FORWARD, BACKWARD, LEFT, RIGHT
+float64 value     # m for FORWARD and BACKWARD, rad for LEFT and RIGHT
+---
+bool success
+geometry_msgs/PoseWithCovariance pose
+int8[] h_walls # see mtc_slam/mtc_slam/slam_lib.py for raskukozjit_h_walls functions
+int8[] v_walls

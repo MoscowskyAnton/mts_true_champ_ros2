@@ -1,0 +1,9 @@
+uint8 FORWARD=0
+uint8 BACKWARD=1
+uint8 LEFT=2
+uint8 RIGHT=3
+
+uint8 direction  # one of FORWARD, BACKWARD, LEFT, RIGHT
+float64 value    # m for FORWARD and BACKWARD, rad for LEFT and RIGHT
+---
+bool success

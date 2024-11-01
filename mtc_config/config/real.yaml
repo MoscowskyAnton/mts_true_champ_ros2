@@ -1,0 +1,20 @@
+mtc/driver:
+  ros__parameters:
+    robot_id: "F535AF9628574A53"
+    ip: "192.168.68.188"
+    sensor_timer_period_s: 0.1
+
+
+mtc/slam:
+  ros__parameters:
+    lab_size: [16, 16]
+    cell_size: [0.168, 0.168]
+    pile_size: 0.024 # 0.12
+    start_pose: [0.084, 0.084, 1.5708]
+    start_pose_sigma: [0.02, 0.02, 0.01]
+    n_particles: 500
+    wall_th: 0.5
+    alpha: [0.75, 0.05, 0.75, 0.05, 0.1, 0.1]
+    n_updates: 4
+    #alpha: [.0, .0, .0, .0, .0, .0]
+    range_sigma: 0.1
